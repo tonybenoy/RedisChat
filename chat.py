@@ -20,20 +20,22 @@ class GetChats(threading.Thread):
     """Threading class to create threads to listen for incoming messages
     """
 
-    def __init__(self, chat, pubsub):
+    def __init__(self, chat, pubsub, gpg):
         """Constructor which takes in the redis PubSub
         object and the name of the channel(The chat)
         """
         threading.Thread.__init__(self)
         self.chat = chat  # Name of Redis Channel/Chat
         self.pubsub = pubsub  # Redis PubSub object
+        self.gpg = gpg
 
     def run(self):
         self.pubsub.subscribe(self.chat)  # Subscribe to Redis Channel/Chat
         for message in self.pubsub.listen():  # Listening to on channel for new messages
             if message["type"] == 'message':  # Only listen to messages and not subscriptions
-                print(str(datetime.datetime.now())+" : " +
-                      message["data"].decode("utf-8"))
+                decrypted_data = self.gpg.decrypt(
+                    str(message["data"].decode("utf-8")))
+                print(str(datetime.datetime.now())+" : " + decrypted_data)
 
 
 class JoinChat(threading.Thread):
@@ -131,7 +133,8 @@ def main():
                 CURRENT_CHAT = COMMAND[6:]
             else:
                 # Create a new chat with that user
-                CHAT = GetChats("".join(sorted([MY_USERNAME, COMMAND[6:]])), P)
+                CHAT = GetChats(
+                    "".join(sorted([MY_USERNAME, COMMAND[6:]])), P, GPG)
                 CHAT.start()
                 CURRENT_CHAT = COMMAND[6:]
                 MY_CHATS.append(CHAT)
@@ -145,7 +148,7 @@ def main():
         else:
             R.publish(
                 "".join(sorted([MY_USERNAME, CURRENT_CHAT])),
-                MY_USERNAME+" : "+COMMAND)  # Send message
+                MY_USERNAME+" : "+GPG.encrypt(COMMAND, CURRENT_CHAT))  # Send message
 
 
 if __name__ == "__main__":
